@@ -1,2 +1,2 @@
-aws-cdk.core
-aws-cdk.assertions
+aws-cdk-lib
+constructs>=10.0.0,<11.0.0
