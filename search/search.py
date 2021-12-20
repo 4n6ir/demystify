@@ -40,12 +40,12 @@ def handler(event, context):
         if len(parsed) == 2:
             
             response = table.query(
-                KeyConditionExpression = Key('pk').eq('AWS#') & Key('sk').begins_with('ACTION#'+parsed[0].lower()+'#'+parsed[1][:-1])
+                KeyConditionExpression = Key('pk').eq('AWS#') & Key('sk').begins_with('ACTION#'+parsed[0].lower()+'#'+parsed[1])
             )
             responsedata = response['Items']
             while 'LastEvaluatedKey' in response:
                 response = table.query(
-                    KeyConditionExpression=Key('pk').eq('AWS#') & Key('sk').begins_with('ACTION#'+parsed[0].lower()+'#'+parsed[1][:-1]),
+                    KeyConditionExpression=Key('pk').eq('AWS#') & Key('sk').begins_with('ACTION#'+parsed[0].lower()+'#'+parsed[1]),
                     ExclusiveStartKey=response['LastEvaluatedKey']
                 )
                 responsedata.extend(response['Items'])
@@ -61,9 +61,9 @@ def handler(event, context):
             msg = permissions
             
         else:
-            msg = 'Try s3:Get*'
+            msg = 'Try s3:GetObject'
     except:
-        msg = 'Try s3:Get*'
+        msg = 'Try s3:GetObject'
         pass
 
     return close(
