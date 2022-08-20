@@ -1,3 +1,6 @@
+import boto3
+import sys
+
 from aws_cdk import (
     Duration,
     RemovalPolicy,
@@ -8,6 +11,9 @@ from aws_cdk import (
     aws_iam as _iam,
     aws_lambda as _lambda,
     aws_logs as _logs,
+    aws_logs_destinations as _destinations,
+    aws_sns as _sns,
+    aws_sns_subscriptions as _subs,
     aws_ssm as _ssm,
 )
 
@@ -17,6 +23,24 @@ class DemystifyStack(Stack):
 
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
+
+        try:
+            client = boto3.client('account')
+            operations = client.get_alternate_contact(
+                AlternateContactType='OPERATIONS'
+            )
+        except:
+            print('Missing IAM Permission --> account:GetAlternateContact')
+            sys.exit(1)
+            pass
+
+        operationstopic = _sns.Topic(
+            self, 'operationstopic'
+        )
+
+        operationstopic.add_subscription(
+            _subs.EmailSubscription(operations['AlternateContact']['EmailAddress'])
+        )
 
 ### DynamoDB Table ###
 
@@ -34,7 +58,7 @@ class DemystifyStack(Stack):
             point_in_time_recovery = True,
             removal_policy = RemovalPolicy.DESTROY
         )
-        
+
         parameter = _ssm.StringParameter(
             self, 'parameter',
             description = 'Demystify DynamoDB Table',
@@ -42,22 +66,22 @@ class DemystifyStack(Stack):
             string_value = table.table_name,
             tier = _ssm.ParameterTier.STANDARD,
         )
-        
+
 ### IAM Role ###
-        
+
         role = _iam.Role(
             self, 'role',
             assumed_by = _iam.ServicePrincipal(
                 'lambda.amazonaws.com'
             )
         )
-        
+
         role.add_managed_policy(
             _iam.ManagedPolicy.from_aws_managed_policy_name(
                 'service-role/AWSLambdaBasicExecutionRole'
             )
         )
-        
+
         role.add_to_policy(
             _iam.PolicyStatement(
                 actions = [
@@ -68,6 +92,40 @@ class DemystifyStack(Stack):
                     '*'
                 ]
             )
+        )
+
+        role.add_to_policy(
+            _iam.PolicyStatement(
+                actions = [
+                    'sns:Publish'
+                ],
+                resources = [
+                    operationstopic.topic_arn
+                ]
+            )
+        )
+
+### ERROR ###
+
+        error = _lambda.Function(
+            self, 'error',
+            runtime = _lambda.Runtime.PYTHON_3_9,
+            code = _lambda.Code.from_asset('error'),
+            handler = 'error.handler',
+            role = role,
+            environment = dict(
+                SNS_TOPIC = operationstopic.topic_arn
+            ),
+            architecture = _lambda.Architecture.ARM_64,
+            timeout = Duration.seconds(7),
+            memory_size = 128
+        )
+
+        errormonitor = _logs.LogGroup(
+            self, 'errormonitor',
+            log_group_name = '/aws/lambda/'+error.function_name,
+            retention = _logs.RetentionDays.ONE_DAY,
+            removal_policy = RemovalPolicy.DESTROY
         )
 
 ### Download Lambda ###
@@ -90,12 +148,18 @@ class DemystifyStack(Stack):
             removal_policy = RemovalPolicy.DESTROY
         )
 
-        downloadmonitor = _ssm.StringParameter(
-            self, 'downloadmonitor',
-            description = 'Demystify Download Monitor',
-            parameter_name = '/demystify/monitor/download',
-            string_value = '/aws/lambda/'+download.function_name,
-            tier = _ssm.ParameterTier.STANDARD,
+        downloadsub = _logs.SubscriptionFilter(
+            self, 'downloadsub',
+            log_group = downloadlogs,
+            destination = _destinations.LambdaDestination(error),
+            filter_pattern = _logs.FilterPattern.all_terms('ERROR')
+        )
+
+        downloadtime= _logs.SubscriptionFilter(
+            self, 'downloadtime',
+            log_group = downloadlogs,
+            destination = _destinations.LambdaDestination(error),
+            filter_pattern = _logs.FilterPattern.all_terms('Task','timed','out')
         )
 
         event = _events.Rule(
@@ -108,6 +172,7 @@ class DemystifyStack(Stack):
                 year = '*'
             )
         )
+
         event.add_target(_targets.LambdaFunction(download))
 
 ### SEARCH LEX V1 ###
@@ -133,10 +198,16 @@ class DemystifyStack(Stack):
             removal_policy = RemovalPolicy.DESTROY
         )
 
-        searchmonitor = _ssm.StringParameter(
-            self, 'searchmonitor',
-            description = 'Demystify Search Monitor',
-            parameter_name = '/demystify/monitor/search',
-            string_value = '/aws/lambda/'+search.function_name,
-            tier = _ssm.ParameterTier.STANDARD,
+        searchsub = _logs.SubscriptionFilter(
+            self, 'searchsub',
+            log_group = searchlogs,
+            destination = _destinations.LambdaDestination(error),
+            filter_pattern = _logs.FilterPattern.all_terms('ERROR')
+        )
+
+        searchtime= _logs.SubscriptionFilter(
+            self, 'searchtime',
+            log_group = searchlogs,
+            destination = _destinations.LambdaDestination(error),
+            filter_pattern = _logs.FilterPattern.all_terms('Task','timed','out')
         )
