@@ -175,13 +175,14 @@ class DemystifyStack(Stack):
 
         event.add_target(_targets.LambdaFunction(download))
 
-### SEARCH LEX V1 ###
+### ACTION ###
 
-        search = _lambda.Function(
-            self, 'search',
+        action = _lambda.Function(
+            self, 'action',
+            function_name = 'action',
             runtime = _lambda.Runtime.PYTHON_3_9,
-            code = _lambda.Code.from_asset('search'),
-            handler = 'search.handler',
+            code = _lambda.Code.from_asset('action'),
+            handler = 'action.handler',
             role = role,
             environment = dict(
                 DYNAMODB_TABLE = table.table_name
@@ -191,23 +192,61 @@ class DemystifyStack(Stack):
             memory_size = 512
         )
 
-        searchlogs = _logs.LogGroup(
-            self, 'searchlogs',
-            log_group_name = '/aws/lambda/'+search.function_name,
+        actionlogs = _logs.LogGroup(
+            self, 'actionlogs',
+            log_group_name = '/aws/lambda/'+action.function_name,
             retention = _logs.RetentionDays.INFINITE,
             removal_policy = RemovalPolicy.DESTROY
         )
 
-        searchsub = _logs.SubscriptionFilter(
-            self, 'searchsub',
-            log_group = searchlogs,
+        actionsub = _logs.SubscriptionFilter(
+            self, 'actionsub',
+            log_group = actionlogs,
             destination = _destinations.LambdaDestination(error),
             filter_pattern = _logs.FilterPattern.all_terms('ERROR')
         )
 
-        searchtime= _logs.SubscriptionFilter(
-            self, 'searchtime',
-            log_group = searchlogs,
+        actiontime= _logs.SubscriptionFilter(
+            self, 'actiontime',
+            log_group = actionlogs,
+            destination = _destinations.LambdaDestination(error),
+            filter_pattern = _logs.FilterPattern.all_terms('Task','timed','out')
+        )
+
+### SERVICE ###
+
+        service = _lambda.Function(
+            self, 'service',
+            function_name = 'service',
+            runtime = _lambda.Runtime.PYTHON_3_9,
+            code = _lambda.Code.from_asset('service'),
+            handler = 'service.handler',
+            role = role,
+            environment = dict(
+                DYNAMODB_TABLE = table.table_name
+            ),
+            architecture = _lambda.Architecture.ARM_64,
+            timeout = Duration.seconds(30),
+            memory_size = 512
+        )
+
+        servicelogs = _logs.LogGroup(
+            self, 'servicelogs',
+            log_group_name = '/aws/lambda/'+service.function_name,
+            retention = _logs.RetentionDays.INFINITE,
+            removal_policy = RemovalPolicy.DESTROY
+        )
+
+        servicesub = _logs.SubscriptionFilter(
+            self, 'servicesub',
+            log_group = servicelogs,
+            destination = _destinations.LambdaDestination(error),
+            filter_pattern = _logs.FilterPattern.all_terms('ERROR')
+        )
+
+        servicetime= _logs.SubscriptionFilter(
+            self, 'servicetime',
+            log_group = servicelogs,
             destination = _destinations.LambdaDestination(error),
             filter_pattern = _logs.FilterPattern.all_terms('Task','timed','out')
         )
