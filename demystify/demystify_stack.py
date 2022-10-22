@@ -232,3 +232,117 @@ class DemystifyStack(Stack):
             destination = _destinations.LambdaDestination(timeout),
             filter_pattern = _logs.FilterPattern.all_terms('Task','timed','out')
         )
+
+### IAM ###
+
+        iam = _lambda.Function(
+            self, 'iamrole',
+            function_name = 'iam',
+            runtime = _lambda.Runtime.PYTHON_3_9,
+            code = _lambda.Code.from_asset('iam'),
+            handler = 'iam.handler',
+            architecture = _lambda.Architecture.ARM_64,
+            timeout = Duration.seconds(60),
+            memory_size = 512,
+            role = role,
+            layers = [
+                layer
+            ]
+        )
+
+        iamlogs = _logs.LogGroup(
+            self, 'iamlogs',
+            log_group_name = '/aws/lambda/'+iam.function_name,
+            retention = _logs.RetentionDays.INFINITE,
+            removal_policy = RemovalPolicy.DESTROY
+        )
+
+        iamsub = _logs.SubscriptionFilter(
+            self, 'iamsub',
+            log_group = iamlogs,
+            destination = _destinations.LambdaDestination(error),
+            filter_pattern = _logs.FilterPattern.all_terms('ERROR')
+        )
+
+        iamtime= _logs.SubscriptionFilter(
+            self, 'iamtime',
+            log_group = iamlogs,
+            destination = _destinations.LambdaDestination(timeout),
+            filter_pattern = _logs.FilterPattern.all_terms('Task','timed','out')
+        )
+
+### RESOURCE ###
+
+        resource = _lambda.Function(
+            self, 'resource',
+            function_name = 'resource',
+            runtime = _lambda.Runtime.PYTHON_3_9,
+            code = _lambda.Code.from_asset('resource'),
+            handler = 'resource.handler',
+            architecture = _lambda.Architecture.ARM_64,
+            timeout = Duration.seconds(60),
+            memory_size = 512,
+            role = role,
+            layers = [
+                layer
+            ]
+        )
+
+        resourcelogs = _logs.LogGroup(
+            self, 'resourcelogs',
+            log_group_name = '/aws/lambda/'+resource.function_name,
+            retention = _logs.RetentionDays.INFINITE,
+            removal_policy = RemovalPolicy.DESTROY
+        )
+
+        resourcesub = _logs.SubscriptionFilter(
+            self, 'resourcesub',
+            log_group = resourcelogs,
+            destination = _destinations.LambdaDestination(error),
+            filter_pattern = _logs.FilterPattern.all_terms('ERROR')
+        )
+
+        resourcetime= _logs.SubscriptionFilter(
+            self, 'resourcetime',
+            log_group = resourcelogs,
+            destination = _destinations.LambdaDestination(timeout),
+            filter_pattern = _logs.FilterPattern.all_terms('Task','timed','out')
+        )
+
+### SCP ###
+
+        scp = _lambda.Function(
+            self, 'scp',
+            function_name = 'scp',
+            runtime = _lambda.Runtime.PYTHON_3_9,
+            code = _lambda.Code.from_asset('scp'),
+            handler = 'scp.handler',
+            architecture = _lambda.Architecture.ARM_64,
+            timeout = Duration.seconds(60),
+            memory_size = 512,
+            role = role,
+            layers = [
+                layer
+            ]
+        )
+
+        scplogs = _logs.LogGroup(
+            self, 'scplogs',
+            log_group_name = '/aws/lambda/'+scp.function_name,
+            retention = _logs.RetentionDays.INFINITE,
+            removal_policy = RemovalPolicy.DESTROY
+        )
+
+        scpsub = _logs.SubscriptionFilter(
+            self, 'scpsub',
+            log_group = scplogs,
+            destination = _destinations.LambdaDestination(error),
+            filter_pattern = _logs.FilterPattern.all_terms('ERROR')
+        )
+
+        scptime= _logs.SubscriptionFilter(
+            self, 'scptime',
+            log_group = scplogs,
+            destination = _destinations.LambdaDestination(timeout),
+            filter_pattern = _logs.FilterPattern.all_terms('Task','timed','out')
+        )
