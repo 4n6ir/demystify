@@ -1,6 +1,3 @@
-import boto3
-import sys
-
 from aws_cdk import (
     Duration,
     RemovalPolicy,
@@ -12,7 +9,6 @@ from aws_cdk import (
     aws_lambda as _lambda,
     aws_logs as _logs,
     aws_logs_destinations as _destinations,
-    aws_sns as _sns,
     aws_sns_subscriptions as _subs,
     aws_ssm as _ssm,
 )
@@ -24,25 +20,27 @@ class DemystifyStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        try:
-            client = boto3.client('account')
-            operations = client.get_alternate_contact(
-                AlternateContactType='OPERATIONS'
-            )
-        except:
-            print('Missing IAM Permission --> account:GetAlternateContact')
-            sys.exit(1)
-            pass
+        account = Stack.of(self).account
+        region = Stack.of(self).region
 
-        operationstopic = _sns.Topic(
-            self, 'operationstopic'
+    ### LAMBDA LAYER ###
+
+        if region == 'ap-northeast-1' or region == 'ap-south-1' or region == 'ap-southeast-1' or \
+            region == 'ap-southeast-2' or region == 'eu-central-1' or region == 'eu-west-1' or \
+            region == 'eu-west-2' or region == 'me-central-1' or region == 'us-east-1' or \
+            region == 'us-east-2' or region == 'us-west-2': number = str(1)
+
+        if region == 'af-south-1' or region == 'ap-east-1' or region == 'ap-northeast-2' or \
+            region == 'ap-northeast-3' or region == 'ap-southeast-3' or region == 'ca-central-1' or \
+            region == 'eu-north-1' or region == 'eu-south-1' or region == 'eu-west-3' or \
+            region == 'me-south-1' or region == 'sa-east-1' or region == 'us-west-1': number = str(2)
+
+        layer = _lambda.LayerVersion.from_layer_version_arn(
+            self, 'layer',
+            layer_version_arn = 'arn:aws:lambda:'+region+':070176467818:layer:getpublicip:'+number
         )
 
-        operationstopic.add_subscription(
-            _subs.EmailSubscription(operations['AlternateContact']['EmailAddress'])
-        )
-
-### DynamoDB Table ###
+    ### DynamoDB Table ###
 
         table = _dynamodb.Table(
             self, 'iam',
@@ -67,7 +65,7 @@ class DemystifyStack(Stack):
             tier = _ssm.ParameterTier.STANDARD,
         )
 
-### IAM Role ###
+    ### IAM Role ###
 
         role = _iam.Role(
             self, 'role',
@@ -94,41 +92,19 @@ class DemystifyStack(Stack):
             )
         )
 
-        role.add_to_policy(
-            _iam.PolicyStatement(
-                actions = [
-                    'sns:Publish'
-                ],
-                resources = [
-                    operationstopic.topic_arn
-                ]
-            )
-        )
+    ### ERROR ###
 
-### ERROR ###
-
-        error = _lambda.Function(
+        error = _lambda.Function.from_function_arn(
             self, 'error',
-            runtime = _lambda.Runtime.PYTHON_3_9,
-            code = _lambda.Code.from_asset('error'),
-            handler = 'error.handler',
-            role = role,
-            environment = dict(
-                SNS_TOPIC = operationstopic.topic_arn
-            ),
-            architecture = _lambda.Architecture.ARM_64,
-            timeout = Duration.seconds(7),
-            memory_size = 128
+            'arn:aws:lambda:'+region+':'+account+':function:shipit-error'
         )
 
-        errormonitor = _logs.LogGroup(
-            self, 'errormonitor',
-            log_group_name = '/aws/lambda/'+error.function_name,
-            retention = _logs.RetentionDays.ONE_DAY,
-            removal_policy = RemovalPolicy.DESTROY
+        timeout = _lambda.Function.from_function_arn(
+            self, 'timeout',
+            'arn:aws:lambda:'+region+':'+account+':function:shipit-timeout'
         )
 
-### Download Lambda ###
+    ### Download Lambda ###
 
         download = _lambda.DockerImageFunction(
             self, 'download',
@@ -158,7 +134,7 @@ class DemystifyStack(Stack):
         downloadtime= _logs.SubscriptionFilter(
             self, 'downloadtime',
             log_group = downloadlogs,
-            destination = _destinations.LambdaDestination(error),
+            destination = _destinations.LambdaDestination(timeout),
             filter_pattern = _logs.FilterPattern.all_terms('Task','timed','out')
         )
 
@@ -188,8 +164,11 @@ class DemystifyStack(Stack):
                 DYNAMODB_TABLE = table.table_name
             ),
             architecture = _lambda.Architecture.ARM_64,
-            timeout = Duration.seconds(30),
-            memory_size = 512
+            timeout = Duration.seconds(60),
+            memory_size = 512,
+            layers = [
+                layer
+            ]
         )
 
         actionlogs = _logs.LogGroup(
@@ -209,7 +188,7 @@ class DemystifyStack(Stack):
         actiontime= _logs.SubscriptionFilter(
             self, 'actiontime',
             log_group = actionlogs,
-            destination = _destinations.LambdaDestination(error),
+            destination = _destinations.LambdaDestination(timeout),
             filter_pattern = _logs.FilterPattern.all_terms('Task','timed','out')
         )
 
@@ -226,8 +205,11 @@ class DemystifyStack(Stack):
                 DYNAMODB_TABLE = table.table_name
             ),
             architecture = _lambda.Architecture.ARM_64,
-            timeout = Duration.seconds(30),
-            memory_size = 512
+            timeout = Duration.seconds(60),
+            memory_size = 512,
+            layers = [
+                layer
+            ]
         )
 
         servicelogs = _logs.LogGroup(
@@ -247,6 +229,6 @@ class DemystifyStack(Stack):
         servicetime= _logs.SubscriptionFilter(
             self, 'servicetime',
             log_group = servicelogs,
-            destination = _destinations.LambdaDestination(error),
+            destination = _destinations.LambdaDestination(timeout),
             filter_pattern = _logs.FilterPattern.all_terms('Task','timed','out')
         )

@@ -18,6 +18,7 @@ DemystifyStack(
     )
 )
 
-cdk.Tags.of(app).add('demystify','demystify')
+cdk.Tags.of(app).add('Alias','Tacklebox')
+cdk.Tags.of(app).add('GitHub','https://github.com/jblukach/demystify')
 
 app.synth()
