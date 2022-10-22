@@ -83,6 +83,7 @@ class DemystifyStack(Stack):
         role.add_to_policy(
             _iam.PolicyStatement(
                 actions = [
+                    'access-analyzer:ValidatePolicy',
                     'dynamodb:PutItem',
                     'dynamodb:Query',
                 ],
