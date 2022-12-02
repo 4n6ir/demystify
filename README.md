@@ -18,7 +18,7 @@ Demystify provides AWS Chatbot integration with Slack Channels for IAM action an
 @aws invoke service --payload {"item": "sso*”}
 ```
 
-IAM Access Analyzer provides the policy validation for identity, resource, and service control JSON policies. 
+IAM Access Analyzer provides the security validation for identity, resource, and service control JSON policies. 
 
 ```
 @aws invoke iam --payload <json>
